@@ -5,6 +5,7 @@ Revises: 20260415_0008
 Create Date: 2026-04-15 19:15:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -51,7 +52,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("code", name="uq_evaluation_runs_code"),
     )
     op.create_index("ix_evaluation_runs_status", "evaluation_runs", ["status"], unique=False)
-    op.create_index("ix_evaluation_runs_market_code", "evaluation_runs", ["market_code"], unique=False)
+    op.create_index(
+        "ix_evaluation_runs_market_code", "evaluation_runs", ["market_code"], unique=False
+    )
     op.create_index(
         "ix_evaluation_runs_model_version_id",
         "evaluation_runs",

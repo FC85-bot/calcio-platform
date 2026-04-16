@@ -5,6 +5,7 @@ Revises: 20260414_0004
 Create Date: 2026-04-14 20:40:00.000000
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -94,7 +95,9 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column("raw_ingestion", sa.Column("normalized_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "raw_ingestion", sa.Column("normalized_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column("raw_ingestion", sa.Column("normalization_error", sa.Text(), nullable=True))
     op.create_foreign_key(
         "fk_raw_ingestion_normalization_run_id_ingestion_runs",

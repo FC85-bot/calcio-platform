@@ -5,6 +5,7 @@ Revises: 20260415_0007
 Create Date: 2026-04-15 14:20:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -65,7 +66,9 @@ def upgrade() -> None:
             name="uq_model_versions_model_registry_version",
         ),
     )
-    op.create_index("ix_model_versions_model_registry_id", "model_versions", ["model_registry_id"], unique=False)
+    op.create_index(
+        "ix_model_versions_model_registry_id", "model_versions", ["model_registry_id"], unique=False
+    )
     op.create_index("ix_model_versions_is_active", "model_versions", ["is_active"], unique=False)
 
     op.create_table(
@@ -88,7 +91,9 @@ def upgrade() -> None:
             "data_quality_score >= 0 AND data_quality_score <= 1",
             name="ck_predictions_data_quality_score_range",
         ),
-        sa.ForeignKeyConstraint(["feature_snapshot_id"], ["feature_snapshots.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["feature_snapshot_id"], ["feature_snapshots.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["model_version_id"], ["model_versions.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
@@ -102,8 +107,12 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_predictions_match_id", "predictions", ["match_id"], unique=False)
-    op.create_index("ix_predictions_feature_snapshot_id", "predictions", ["feature_snapshot_id"], unique=False)
-    op.create_index("ix_predictions_model_version_id", "predictions", ["model_version_id"], unique=False)
+    op.create_index(
+        "ix_predictions_feature_snapshot_id", "predictions", ["feature_snapshot_id"], unique=False
+    )
+    op.create_index(
+        "ix_predictions_model_version_id", "predictions", ["model_version_id"], unique=False
+    )
     op.create_index("ix_predictions_market_code", "predictions", ["market_code"], unique=False)
     op.create_index("ix_predictions_as_of_ts", "predictions", ["as_of_ts"], unique=False)
 

@@ -5,6 +5,7 @@ Revises: 20260414_0001
 Create Date: 2026-04-14 12:30:00.000000
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -106,8 +107,12 @@ def upgrade() -> None:
             name="uq_provider_entities_provider_entity_external",
         ),
     )
-    op.create_index("ix_provider_entities_internal_id", "provider_entities", ["internal_id"], unique=False)
-    op.create_index("ix_provider_entities_provider_id", "provider_entities", ["provider_id"], unique=False)
+    op.create_index(
+        "ix_provider_entities_internal_id", "provider_entities", ["internal_id"], unique=False
+    )
+    op.create_index(
+        "ix_provider_entities_provider_id", "provider_entities", ["provider_id"], unique=False
+    )
 
     op.create_table(
         "matches",
@@ -159,7 +164,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["provider_id"], ["providers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("match_id", "provider_id", "timestamp", name="uq_odds_match_provider_timestamp"),
+        sa.UniqueConstraint(
+            "match_id", "provider_id", "timestamp", name="uq_odds_match_provider_timestamp"
+        ),
     )
     op.create_index("ix_odds_match_id", "odds", ["match_id"], unique=False)
     op.create_index("ix_odds_provider_id", "odds", ["provider_id"], unique=False)

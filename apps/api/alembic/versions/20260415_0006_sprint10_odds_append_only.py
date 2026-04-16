@@ -5,6 +5,7 @@ Revises: 20260414_0005
 Create Date: 2026-04-15 09:10:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -98,7 +99,11 @@ def upgrade() -> None:
     odds = sa.Table("odds", metadata, autoload_with=bind)
 
     market_ids: dict[str, object] = {}
-    for market_code, market_name in [("1X2", "1X2"), ("OU", "Over/Under"), ("BTTS", "Both Teams To Score")]:
+    for market_code, market_name in [
+        ("1X2", "1X2"),
+        ("OU", "Over/Under"),
+        ("BTTS", "Both Teams To Score"),
+    ]:
         existing_market_id = bind.execute(
             sa.select(markets.c.id).where(markets.c.code == market_code)
         ).scalar_one_or_none()
@@ -114,8 +119,9 @@ def upgrade() -> None:
         market_ids[market_code] = existing_market_id
 
     provider_rows = bind.execute(
-        sa.select(sa.distinct(odds_legacy.c.provider_id), providers.c.name)
-        .select_from(odds_legacy.join(providers, providers.c.id == odds_legacy.c.provider_id))
+        sa.select(sa.distinct(odds_legacy.c.provider_id), providers.c.name).select_from(
+            odds_legacy.join(providers, providers.c.id == odds_legacy.c.provider_id)
+        )
     ).all()
 
     provider_bookmaker_ids: dict[object, object] = {}
@@ -136,7 +142,8 @@ def upgrade() -> None:
             sa.select(provider_entities.c.id).where(
                 provider_entities.c.provider_id == provider_id,
                 provider_entities.c.entity_type == "bookmaker",
-                provider_entities.c.external_id == f"{LEGACY_BOOKMAKER_EXTERNAL_PREFIX}{provider_name}",
+                provider_entities.c.external_id
+                == f"{LEGACY_BOOKMAKER_EXTERNAL_PREFIX}{provider_name}",
             )
         ).scalar_one_or_none()
         if mapping_exists is None:
@@ -266,21 +273,27 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["provider_id"], ["providers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("match_id", "provider_id", "timestamp", name="uq_odds_match_provider_timestamp"),
+        sa.UniqueConstraint(
+            "match_id", "provider_id", "timestamp", name="uq_odds_match_provider_timestamp"
+        ),
     )
     restored = sa.Table("odds_legacy_restore", metadata, autoload_with=bind)
 
-    rows = bind.execute(
-        sa.select(
-            odds.c.match_id,
-            odds.c.provider_id,
-            odds.c.snapshot_timestamp,
-            markets.c.code.label("market_code"),
-            odds.c.selection_code,
-            odds.c.line_value,
-            odds.c.odds_value,
-        ).join(markets, markets.c.id == odds.c.market_id)
-    ).mappings().all()
+    rows = (
+        bind.execute(
+            sa.select(
+                odds.c.match_id,
+                odds.c.provider_id,
+                odds.c.snapshot_timestamp,
+                markets.c.code.label("market_code"),
+                odds.c.selection_code,
+                odds.c.line_value,
+                odds.c.odds_value,
+            ).join(markets, markets.c.id == odds.c.market_id)
+        )
+        .mappings()
+        .all()
+    )
 
     grouped: dict[tuple[object, object, object], dict[str, object]] = {}
     for row in rows:

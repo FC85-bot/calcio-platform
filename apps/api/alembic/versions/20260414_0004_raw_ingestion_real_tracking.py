@@ -5,6 +5,7 @@ Revises: 20260414_0003
 Create Date: 2026-04-14 18:15:00.000000
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -63,7 +64,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_raw_ingestion_provider_entity_type_ingested_at", table_name="raw_ingestion")
     op.drop_index("ix_raw_ingestion_run_id", table_name="raw_ingestion")
-    op.drop_constraint("fk_raw_ingestion_run_id_ingestion_runs", "raw_ingestion", type_="foreignkey")
+    op.drop_constraint(
+        "fk_raw_ingestion_run_id_ingestion_runs", "raw_ingestion", type_="foreignkey"
+    )
 
     op.drop_column("raw_ingestion", "response_metadata")
     op.drop_column("raw_ingestion", "request_params")

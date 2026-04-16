@@ -5,6 +5,7 @@ Revises: 20260415_0006
 Create Date: 2026-04-15 10:45:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -53,8 +54,12 @@ def upgrade() -> None:
             name="uq_feature_snapshots_match_as_of_horizon_version",
         ),
     )
-    op.create_index("ix_feature_snapshots_match_id", "feature_snapshots", ["match_id"], unique=False)
-    op.create_index("ix_feature_snapshots_as_of_ts", "feature_snapshots", ["as_of_ts"], unique=False)
+    op.create_index(
+        "ix_feature_snapshots_match_id", "feature_snapshots", ["match_id"], unique=False
+    )
+    op.create_index(
+        "ix_feature_snapshots_as_of_ts", "feature_snapshots", ["as_of_ts"], unique=False
+    )
     op.create_index(
         "ix_feature_snapshots_feature_set_version",
         "feature_snapshots",
