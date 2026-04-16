@@ -1,0 +1,21 @@
+Removed from versioning / cleanup applied:
+- .env
+- apps/web/.env.local
+- .venv/
+- .ruff_cache/
+- apps/api/.pytest_cache/
+- apps/api/.ruff_cache/
+- apps/api/calcio_platform_api.egg-info/
+- apps/web/.next/
+- apps/web/node_modules/
+- apps/web/tsconfig.tsbuildinfo
+- root package-lock.json
+- all __pycache__/ directories
+
+Large cleanup patterns removed from the original delivery:
+- **/__pycache__/
+- **/.pytest_cache/
+- **/.ruff_cache/
+- **/node_modules/
+- **/.next/
+- .venv/**

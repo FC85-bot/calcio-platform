@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+
+# Virtual environments
+.venv/
+**/.venv/
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!apps/web/.env.example
+
+# Tool caches
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+**/.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build / packaging artifacts
+build/
+dist/
+.eggs/
+*.egg-info/
+**/*.egg-info/
+
+# Frontend / Node / Next
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+package-lock.json
+!apps/web/package-lock.json
+tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local runtime artifacts
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/

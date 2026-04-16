@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+
+jobs:
+  backend-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Repo hygiene check
+        run: |
+          python scripts/check_repo_hygiene.py
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e './apps/api[dev]'
+
+      - name: Ruff format check
+        run: |
+          python -m ruff format --check apps/api/app apps/api/tests scripts run_feature_snapshots.py
+
+      - name: Ruff lint (core errors)
+        run: |
+          python -m ruff check --select E,F --ignore E402,E501 apps/api/app apps/api/tests scripts run_feature_snapshots.py
+
+      - name: Compile check
+        run: |
+          python -m compileall apps/api/app apps/api/tests scripts run_feature_snapshots.py
+
+      - name: Import check
+        run: |
+          python - <<'PY'
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path('apps/api').resolve()))
+          import app.main  # noqa: F401
+          import app.api.router  # noqa: F401
+          import app.services.ingestion_service  # noqa: F401
+          import app.services.monitoring_service  # noqa: F401
+          print('import_check_ok')
+          PY
+
+      - name: Migration graph check
+        run: |
+          python scripts/check_migrations.py
+
+      - name: Pytest
+        run: |
+          pytest -q apps/api/tests
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: apps/web
+        env:
+          CALCIO_API_BASE_URL: http://127.0.0.1:8000/api/v1
+        run: npm run build

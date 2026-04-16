@@ -1,0 +1,95 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: calcio-platform-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-calcio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calcio}
+      POSTGRES_DB: ${POSTGRES_DB:-calcio_platform}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-calcio} -d ${POSTGRES_DB:-calcio_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: calcio-platform-api
+    restart: unless-stopped
+    environment:
+      PROJECT_NAME: ${PROJECT_NAME:-Calcio Platform API}
+      ENVIRONMENT: ${ENVIRONMENT:-docker}
+      DEBUG: ${DEBUG:-false}
+      API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-false}
+      POSTGRES_SERVER: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-calcio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calcio}
+      POSTGRES_DB: ${POSTGRES_DB:-calcio_platform}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-20}
+      DATABASE_POOL_PRE_PING: ${DATABASE_POOL_PRE_PING:-true}
+      DATABASE_ECHO: ${DATABASE_ECHO:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+      INGESTION_PROVIDER: ${INGESTION_PROVIDER:-mock_provider}
+      RAW_STORAGE_PATH: ${RAW_STORAGE_PATH:-data/raw}
+      PROVIDER_TIMEOUT_SECONDS: ${PROVIDER_TIMEOUT_SECONDS:-20}
+      PROVIDER_RETRY_ATTEMPTS: ${PROVIDER_RETRY_ATTEMPTS:-3}
+      PROVIDER_RETRY_BACKOFF_SECONDS: ${PROVIDER_RETRY_BACKOFF_SECONDS:-1.0}
+      FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+      FOOTBALL_DATA_COMPETITION_CODES: ${FOOTBALL_DATA_COMPETITION_CODES:-["SA"]}
+      THE_ODDS_API_BASE_URL: ${THE_ODDS_API_BASE_URL:-https://api.the-odds-api.com/v4}
+      THE_ODDS_API_API_KEY: ${THE_ODDS_API_API_KEY:-}
+      THE_ODDS_API_SPORT_KEYS: ${THE_ODDS_API_SPORT_KEYS:-["soccer_italy_serie_a"]}
+      THE_ODDS_API_REGIONS: ${THE_ODDS_API_REGIONS:-["eu"]}
+      THE_ODDS_API_BOOKMAKERS: ${THE_ODDS_API_BOOKMAKERS:-[]}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+    command: >
+      sh -c "python scripts/wait_for_db.py &&
+             alembic -c apps/api/alembic.ini upgrade head &&
+             uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        CALCIO_API_BASE_URL: ${CALCIO_API_BASE_URL:-http://api:8000/api/v1}
+    container_name: calcio-platform-web
+    restart: unless-stopped
+    environment:
+      CALCIO_API_BASE_URL: ${CALCIO_API_BASE_URL:-http://api:8000/api/v1}
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
