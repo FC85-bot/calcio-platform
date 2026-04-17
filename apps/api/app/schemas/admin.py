@@ -113,16 +113,12 @@ class MonitoringProviderLatencyRead(BaseModel):
 
 
 class DataQualitySignalRead(BaseModel):
-    signal_name: str
-    layer: str
-    severity: str
-    status: str
-    observed_value: int
-    threshold_value: int
+    name: str
+    value: int
 
 
 class DataConfidenceRead(BaseModel):
-    data_confidence_status: str
+    status: str
     critical_signal_count: int
     signals: list[DataQualitySignalRead] = Field(default_factory=list)
 

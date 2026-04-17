@@ -23,6 +23,9 @@ def test_monitoring_summary_endpoint_returns_operational_snapshot(client):
     assert "checks" in payload
     assert "pipelines" in payload
     assert "provider_latency" in payload
+    assert payload["data_confidence"]["status"] in {"OK", "BROKEN"}
+    assert isinstance(payload["data_confidence"]["critical_signal_count"], int)
+    assert isinstance(payload["data_confidence"]["signals"], list)
 
 
 def test_validation_error_response_is_readable_and_carries_request_id(client):
