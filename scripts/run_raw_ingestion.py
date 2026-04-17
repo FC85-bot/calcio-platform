@@ -62,6 +62,30 @@ def _return_code(results: dict[str, dict[str, Any]]) -> int:
     return 0
 
 
+def _log_results(results: dict[str, dict[str, Any]], provider_name: str) -> None:
+    logger.info(
+        "raw_ingestion_script_completed",
+        extra={
+            "provider": provider_name,
+            "result_count": len(results),
+        },
+    )
+    for entity_type, value in results.items():
+        payload = {
+            "provider": provider_name,
+            "entity_type": entity_type,
+            "status": value.get("status"),
+            "row_count": value.get("row_count", 0),
+            "raw_record_count": value.get("raw_record_count", 0),
+            "created_count": value.get("created_count", 0),
+            "skipped_count": value.get("skipped_count", 0),
+            "error_count": value.get("error_count", 0),
+        }
+        if value.get("reason"):
+            payload["reason"] = value["reason"]
+        logger.info("raw_ingestion_script_result", extra=payload)
+
+
 def main() -> int:
     settings = get_settings()
     args = parse_args()
@@ -85,32 +109,12 @@ def main() -> int:
                 "error": str(exc),
             },
         )
-        print(f"Raw ingestion failed: {exc}", file=sys.stderr)
         return 1
     finally:
         if provider is not None:
             provider.close()
 
-    logger.info(
-        "raw_ingestion_script_completed",
-        extra={"provider": settings.ingestion_provider},
-    )
-    print("Raw ingestion completed:")
-    for key, value in results.items():
-        print(
-            "- {key}: status={status} row_count={row_count} raw_record_count={raw_record_count} "
-            "created_count={created_count} skipped_count={skipped_count} error_count={error_count}".format(
-                key=key,
-                status=value.get("status"),
-                row_count=value.get("row_count", 0),
-                raw_record_count=value.get("raw_record_count", 0),
-                created_count=value.get("created_count", 0),
-                skipped_count=value.get("skipped_count", 0),
-                error_count=value.get("error_count", 0),
-            )
-        )
-        if value.get("reason"):
-            print(f"  reason={value['reason']}")
+    _log_results(results, settings.ingestion_provider)
     return _return_code(results)
 
 

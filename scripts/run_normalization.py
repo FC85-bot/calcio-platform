@@ -44,6 +44,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _log_results(results: list[dict]) -> bool:
+    has_errors = False
+    logger.info(
+        "normalization_script_completed",
+        extra={"result_count": len(results)},
+    )
+    for result in results:
+        payload = {
+            "provider": result.get("provider"),
+            "entity_type": result.get("entity_type"),
+            "status": result.get("status"),
+            "run_id": result.get("run_id"),
+            "raw_record_count": result.get("raw_record_count", 0),
+            "row_count": result.get("row_count", 0),
+            "created_count": result.get("created_count", 0),
+            "updated_count": result.get("updated_count", 0),
+            "skipped_count": result.get("skipped_count", 0),
+            "error_count": result.get("error_count", 0),
+        }
+        if result.get("reason"):
+            payload["reason"] = result["reason"]
+        logger.info("normalization_script_result", extra=payload)
+        if result.get("status") == "failed" or int(result.get("error_count") or 0) > 0:
+            has_errors = True
+    return has_errors
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -56,22 +83,9 @@ def main() -> int:
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("normalization_script_failed", extra={"error": str(exc)})
-        print(f"Normalization failed: {exc}", file=sys.stderr)
         return 1
 
-    print("Normalization completed:")
-    has_errors = False
-    for result in results:
-        print(
-            "- provider={provider} entity_type={entity_type} status={status} run_id={run_id} "
-            "raw_record_count={raw_record_count} row_count={row_count} "
-            "created_count={created_count} updated_count={updated_count} "
-            "skipped_count={skipped_count} error_count={error_count}".format(**result)
-        )
-        if result.get("reason"):
-            print(f"  reason={result['reason']}")
-        if result.get("status") == "failed" or int(result.get("error_count") or 0) > 0:
-            has_errors = True
+    has_errors = _log_results(results)
     return 1 if has_errors else 0
 
 

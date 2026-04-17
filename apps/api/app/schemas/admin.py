@@ -112,6 +112,21 @@ class MonitoringProviderLatencyRead(BaseModel):
     last_observed_at: datetime | None = None
 
 
+class DataQualitySignalRead(BaseModel):
+    signal_name: str
+    layer: str
+    severity: str
+    status: str
+    observed_value: int
+    threshold_value: int
+
+
+class DataConfidenceRead(BaseModel):
+    data_confidence_status: str
+    critical_signal_count: int
+    signals: list[DataQualitySignalRead] = Field(default_factory=list)
+
+
 class MonitoringSummaryRead(BaseModel):
     service: str
     environment: str
@@ -122,3 +137,4 @@ class MonitoringSummaryRead(BaseModel):
     checks: list[MonitoringCheckRead] = Field(default_factory=list)
     pipelines: list[MonitoringPipelineStateRead] = Field(default_factory=list)
     provider_latency: list[MonitoringProviderLatencyRead] = Field(default_factory=list)
+    data_confidence: DataConfidenceRead

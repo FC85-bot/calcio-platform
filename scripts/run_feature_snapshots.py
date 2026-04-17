@@ -99,22 +99,29 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _print_audit_lines(item: dict) -> None:
+def _build_item_payload(item: dict) -> dict:
+    payload = {
+        "match_id": item.get("match_id"),
+        "status": item.get("status"),
+        "as_of_ts": item.get("as_of_ts"),
+        "prediction_horizon": item.get("prediction_horizon"),
+        "feature_set_version": item.get("feature_set_version"),
+        "completeness_score": item.get("completeness_score"),
+    }
     if item.get("warning"):
-        print(f"  warning={item['warning']}")
+        payload["warning"] = item["warning"]
     if item.get("error"):
-        print(f"  error={item['error']}")
-
+        payload["error"] = item["error"]
     missing_feature_groups = item.get("missing_feature_groups") or []
     data_warnings = item.get("data_warnings") or []
     missing_fields = item.get("missing_fields") or []
-
     if missing_feature_groups:
-        print(f"  missing_feature_groups={','.join(missing_feature_groups)}")
+        payload["missing_feature_groups"] = missing_feature_groups
     if data_warnings:
-        print(f"  data_warnings={','.join(data_warnings)}")
+        payload["data_warnings"] = data_warnings
     if missing_fields:
-        print(f"  missing_fields={','.join(missing_fields)}")
+        payload["missing_fields"] = missing_fields
+    return payload
 
 
 def main() -> int:
@@ -130,13 +137,12 @@ def main() -> int:
                     feature_set_version=args.feature_set_version,
                     persist=not args.dry_run,
                 )
-                print("Feature snapshot run completed:")
-                print(
-                    "- match_id={match_id} status={status} as_of_ts={as_of_ts} "
-                    "prediction_horizon={prediction_horizon} feature_set_version={feature_set_version} "
-                    "completeness_score={completeness_score}".format(**result)
+                logger.info(
+                    "feature_snapshot_script_completed", extra={"mode": "single"}
                 )
-                _print_audit_lines(result)
+                logger.info(
+                    "feature_snapshot_script_result", extra=_build_item_payload(result)
+                )
                 return 1 if result.get("status") == "error" else 0
 
             batch_result = service.build_feature_snapshots(
@@ -151,26 +157,21 @@ def main() -> int:
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("feature_snapshot_script_failed", extra={"error": str(exc)})
-        print(f"Feature snapshots failed: {exc}", file=sys.stderr)
         return 1
 
-    print("Feature snapshot batch completed:")
-    print(f"- target_count: {batch_result['target_count']}")
-    print(f"- created: {batch_result['created']}")
-    print(f"- skipped: {batch_result['skipped']}")
-    print(f"- errors: {batch_result['errors']}")
-    summary = batch_result.get("summary", {})
-    if summary:
-        print(f"- created_with_warnings: {summary.get('created_with_warnings', 0)}")
-        print(f"- warning_counts: {summary.get('warning_counts', {})}")
-        print(f"- error_counts: {summary.get('error_counts', {})}")
+    logger.info(
+        "feature_snapshot_script_completed",
+        extra={
+            "mode": "batch",
+            "target_count": batch_result.get("target_count", 0),
+            "created": batch_result.get("created", 0),
+            "skipped": batch_result.get("skipped", 0),
+            "errors": batch_result.get("errors", 0),
+            "summary": batch_result.get("summary", {}),
+        },
+    )
     for item in batch_result["results"]:
-        print(
-            "- match_id={match_id} status={status} as_of_ts={as_of_ts} "
-            "feature_set_version={feature_set_version} prediction_horizon={prediction_horizon} "
-            "completeness_score={completeness_score}".format(**item)
-        )
-        _print_audit_lines(item)
+        logger.info("feature_snapshot_script_result", extra=_build_item_payload(item))
     return 1 if int(batch_result.get("errors") or 0) > 0 else 0
 
 

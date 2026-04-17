@@ -47,22 +47,10 @@ async def request_context_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or uuid4().hex
     request_id_token = set_request_id(request_id)
     log_context_token = bind_log_context(request_id=request_id)
-    started_at = perf_counter()
+    request.state.request_started_at = perf_counter()
     try:
         response = await call_next(request)
-    except Exception:
-        duration_ms = round((perf_counter() - started_at) * 1000, 2)
-        logger.exception(
-            "http_request_failed",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "duration_ms": duration_ms,
-            },
-        )
-        raise
-    else:
-        duration_ms = round((perf_counter() - started_at) * 1000, 2)
+        duration_ms = round((perf_counter() - request.state.request_started_at) * 1000, 2)
         response.headers["X-Request-ID"] = request_id
         logger.info(
             "http_request_completed",

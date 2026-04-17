@@ -104,6 +104,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _build_item_payload(item: dict) -> dict:
+    payload = {
+        "match_id": item.get("match_id"),
+        "market_code": item.get("market_code"),
+        "status": item.get("status"),
+        "model_version_id": item.get("model_version_id"),
+        "feature_snapshot_id": item.get("feature_snapshot_id"),
+    }
+    if item.get("warning"):
+        payload["warning"] = item["warning"]
+    if item.get("error"):
+        payload["error"] = item["error"]
+    return payload
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -123,33 +138,20 @@ def main() -> int:
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("prediction_script_failed", extra={"error": str(exc)})
-        print(f"Prediction batch failed: {exc}", file=sys.stderr)
         return 1
 
-    print("Prediction batch completed:")
-    print(f"- target_count: {result['target_count']}")
-    print(f"- created: {result['created']}")
-    print(f"- skipped: {result['skipped']}")
-    print(f"- errors: {result['errors']}")
-    summary = result.get("summary", {})
-    if summary:
-        print(f"- warning_counts: {summary.get('warning_counts', {})}")
-        print(f"- error_counts: {summary.get('error_counts', {})}")
+    logger.info(
+        "prediction_script_completed",
+        extra={
+            "target_count": result.get("target_count", 0),
+            "created": result.get("created", 0),
+            "skipped": result.get("skipped", 0),
+            "errors": result.get("errors", 0),
+            "summary": result.get("summary", {}),
+        },
+    )
     for item in result["results"]:
-        print(
-            "- match_id={match_id} market_code={market_code} status={status} model_version_id={model_version_id} "
-            "feature_snapshot_id={feature_snapshot_id}".format(
-                match_id=item.get("match_id"),
-                market_code=item.get("market_code"),
-                status=item.get("status"),
-                model_version_id=item.get("model_version_id"),
-                feature_snapshot_id=item.get("feature_snapshot_id"),
-            )
-        )
-        if item.get("warning"):
-            print(f"  warning={item['warning']}")
-        if item.get("error"):
-            print(f"  error={item['error']}")
+        logger.info("prediction_script_result", extra=_build_item_payload(item))
     return 1 if int(result.get("errors") or 0) > 0 else 0
 
 

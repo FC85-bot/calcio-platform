@@ -9,11 +9,18 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.models.competition import Competition
 from app.models.evaluation_run import EvaluationRun
 from app.models.feature_snapshot import FeatureSnapshot
 from app.models.ingestion_run import IngestionRun
+from app.models.market import Market
+from app.models.match import Match
+from app.models.odds import Odds
 from app.models.prediction import Prediction
+from app.models.prediction_selection import PredictionSelection
+from app.models.provider_entity import ProviderEntity
 from app.models.raw_ingestion import RawIngestion
+from app.models.team import Team
 
 
 class MonitoringService:
@@ -93,6 +100,55 @@ class MonitoringService:
             "checks": checks,
             "pipelines": pipelines,
             "provider_latency": self._provider_latency_summary(),
+            "data_confidence": self.get_data_confidence_summary(),
+        }
+
+    def get_data_confidence_summary(self) -> dict[str, Any]:
+        signals = [
+            self._build_data_quality_signal(
+                signal_name="matches_missing_team_count",
+                layer="normalized/core",
+                observed_value=self._count_matches_missing_team(),
+                threshold_value=0,
+                severity="critical",
+            ),
+            self._build_data_quality_signal(
+                signal_name="matches_missing_competition_count",
+                layer="normalized/core",
+                observed_value=self._count_matches_missing_competition(),
+                threshold_value=0,
+                severity="critical",
+            ),
+            self._build_data_quality_signal(
+                signal_name="provider_mapping_missing_count",
+                layer="normalization/mapping",
+                observed_value=self._count_provider_mapping_missing(),
+                threshold_value=0,
+                severity="critical",
+            ),
+            self._build_data_quality_signal(
+                signal_name="odds_inconsistent_count",
+                layer="odds",
+                observed_value=self._count_odds_inconsistent(),
+                threshold_value=0,
+                severity="critical",
+            ),
+            self._build_data_quality_signal(
+                signal_name="predictions_without_selections_count",
+                layer="predictions",
+                observed_value=self._count_predictions_without_selections(),
+                threshold_value=0,
+                severity="critical",
+            ),
+        ]
+
+        critical_signal_count = sum(1 for signal in signals if signal["status"] == "critical")
+        data_confidence_status = "BROKEN" if critical_signal_count > 0 else "OK"
+
+        return {
+            "data_confidence_status": data_confidence_status,
+            "critical_signal_count": critical_signal_count,
+            "signals": signals,
         }
 
     def _measure_database_latency_ms(self) -> float:
@@ -319,6 +375,94 @@ class MonitoringService:
             "evaluation_runs": self.settings.monitoring_evaluation_stale_after_hours * 60,
         }
         return mapping.get(pipeline)
+
+    def _count_matches_missing_team(self) -> int:
+        return int(
+            self.db.execute(
+                select(func.count(Match.id)).where(
+                    (Match.home_team_id.is_(None)) | (Match.away_team_id.is_(None))
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    def _count_matches_missing_competition(self) -> int:
+        return int(
+            self.db.execute(
+                select(func.count(Match.id)).where(Match.competition_id.is_(None))
+            ).scalar_one()
+            or 0
+        )
+
+    def _count_provider_mapping_missing(self) -> int:
+        total = 0
+        total += self._count_missing_mappings_for_model(Competition, "competition")
+        total += self._count_missing_mappings_for_model(Team, "team")
+        total += self._count_missing_mappings_for_model(Match, "match")
+        return total
+
+    def _count_missing_mappings_for_model(self, model, entity_type: str) -> int:
+        return int(
+            self.db.execute(
+                select(func.count())
+                .select_from(model)
+                .where(
+                    ~select(ProviderEntity.id)
+                    .where(
+                        ProviderEntity.entity_type == entity_type,
+                        ProviderEntity.internal_id == model.id,
+                    )
+                    .exists()
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    def _count_odds_inconsistent(self) -> int:
+        return int(
+            self.db.execute(
+                select(func.count(Odds.id))
+                .select_from(Odds)
+                .outerjoin(Market, Market.id == Odds.market_id)
+                .where(
+                    (Odds.market_id.is_(None))
+                    | (Odds.odds_value <= 1)
+                    | ((Market.code == "OU") & (Odds.line_value.is_(None)))
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    def _count_predictions_without_selections(self) -> int:
+        return int(
+            self.db.execute(
+                select(func.count(Prediction.id)).where(
+                    ~select(PredictionSelection.id)
+                    .where(PredictionSelection.prediction_id == Prediction.id)
+                    .exists()
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    def _build_data_quality_signal(
+        self,
+        *,
+        signal_name: str,
+        layer: str,
+        observed_value: int,
+        threshold_value: int,
+        severity: str,
+    ) -> dict[str, Any]:
+        status = "ok" if observed_value <= threshold_value else severity
+        return {
+            "signal_name": signal_name,
+            "layer": layer,
+            "severity": severity,
+            "status": status,
+            "observed_value": observed_value,
+            "threshold_value": threshold_value,
+        }
 
     def _coerce_utc(self, value: datetime | None) -> datetime | None:
         if value is None:

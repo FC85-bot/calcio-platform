@@ -88,9 +88,12 @@ def main() -> int:
         market_code = None
     else:
         if raw_market not in SUPPORTED_MARKETS:
-            print(
-                f"Unsupported market code: {raw_market}. Allowed: ALL,{','.join(SUPPORTED_MARKETS)}",
-                file=sys.stderr,
+            logger.error(
+                "evaluation_script_invalid_market_code",
+                extra={
+                    "market_code": raw_market,
+                    "supported_markets": list(SUPPORTED_MARKETS),
+                },
             )
             return 2
         markets = None
@@ -111,36 +114,26 @@ def main() -> int:
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("evaluation_script_failed", extra={"error": str(exc)})
-        print(f"Evaluation failed: {exc}", file=sys.stderr)
         return 1
 
-    print("Evaluation completed:")
-    print(f"- evaluation_run_id: {result['id']}")
-    print(f"- code: {result['code']}")
-    print(f"- name: {result['name']}")
-    print(f"- market_code: {result['market_code']}")
-    print(f"- status: {result['status']}")
-    print(f"- sample_size: {result.get('sample_size')}")
-    print(f"- period_start: {result['period_start']}")
-    print(f"- period_end: {result['period_end']}")
-
-    metrics = result.get("global_metrics", [])
-    if metrics:
-        print("- global_metrics:")
-        for metric in metrics:
-            print(f"  * {metric['metric_code']}={metric['metric_value']}")
-
-    config = result.get("config_json") or {}
-    quality_checks = config.get("quality_checks", {})
-    if quality_checks:
-        print("- quality_checks:")
-        for key, value in quality_checks.items():
-            print(f"  * {key}={value}")
-
-    warnings = config.get("warnings", [])
-    if warnings:
-        print(f"- warnings: {warnings}")
-
+    logger.info(
+        "evaluation_script_completed",
+        extra={
+            "evaluation_run_id": result.get("id"),
+            "code": result.get("code"),
+            "name": result.get("name"),
+            "market_code": result.get("market_code"),
+            "status": result.get("status"),
+            "sample_size": result.get("sample_size"),
+            "period_start": result.get("period_start"),
+            "period_end": result.get("period_end"),
+            "global_metrics": result.get("global_metrics", []),
+            "quality_checks": (result.get("config_json") or {}).get(
+                "quality_checks", {}
+            ),
+            "warnings": (result.get("config_json") or {}).get("warnings", []),
+        },
+    )
     return 0 if result.get("status") == "success" else 1
 
 
