@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from uuid import UUID
 
 PROBABILITY_EPSILON = 1e-12
@@ -43,6 +43,7 @@ class EvaluatedPredictionRow:
     top_edge_pct: float | None
     top_confidence_score: float | None
     selections: tuple[EvaluatedSelection, ...]
+    prediction_horizon: str = "pre_match"
 
 
 def clamp_probability(value: float, *, epsilon: float = PROBABILITY_EPSILON) -> float:
@@ -86,18 +87,14 @@ def compute_brier_score(rows: Sequence[EvaluatedPredictionRow]) -> float | None:
         return None
 
     total = 0.0
-    classes = 0
     for row in rows:
         if not row.selections:
             return None
-        classes += len(row.selections)
         for selection in row.selections:
             observed = 1.0 if selection.selection_code == row.actual_selection_code else 0.0
             total += (float(selection.predicted_probability) - observed) ** 2
 
-    if classes == 0:
-        return None
-    return total / classes
+    return total / len(rows)
 
 
 def compute_hit_rate(rows: Sequence[EvaluatedPredictionRow]) -> float | None:
@@ -121,6 +118,49 @@ def compute_avg_edge_pct(rows: Sequence[EvaluatedPredictionRow]) -> float | None
     if not values:
         return None
     return sum(values) / len(values)
+
+
+def compute_edge_positive_win_rate(rows: Sequence[EvaluatedPredictionRow]) -> float | None:
+    eligible = [
+        row for row in rows if row.top_edge_pct is not None and float(row.top_edge_pct) > 0.0
+    ]
+    if not eligible:
+        return None
+    hits = sum(1 for row in eligible if row.top_selection_code == row.actual_selection_code)
+    return hits / len(eligible)
+
+
+def compute_edge_positive_sample_size(rows: Sequence[EvaluatedPredictionRow]) -> float:
+    return float(
+        sum(1 for row in rows if row.top_edge_pct is not None and float(row.top_edge_pct) > 0.0)
+    )
+
+
+def _confidence_bucket_key(value: float | None) -> str | None:
+    if value is None:
+        return None
+    normalized = max(min(float(value) / 100.0, 1.0), 0.0)
+    lower = math.floor(normalized * 10.0) / 10.0
+    upper = min(lower + 0.1, 1.0)
+    return f"{lower:.1f}_{upper:.1f}"
+
+
+def iter_calibration_metric_rows(
+    rows: Sequence[EvaluatedPredictionRow],
+) -> Iterable[tuple[str, str, float]]:
+    buckets: dict[str, list[EvaluatedPredictionRow]] = {}
+    for row in rows:
+        prob = row.top_probability
+        bucket_floor = int(prob * 10) / 10
+        bucket_ceil = min(bucket_floor + 0.1, 1.0)
+        bucket_key = f"{bucket_floor:.1f}_{bucket_ceil:.1f}"
+        buckets.setdefault(bucket_key, []).append(row)
+
+    for bucket_key, bucket_rows in sorted(buckets.items()):
+        yield f"calibration_bucket={bucket_key}", "sample_size", float(len(bucket_rows))
+        hit_rate = compute_hit_rate(bucket_rows)
+        if hit_rate is not None:
+            yield f"calibration_bucket={bucket_key}", "calibration_accuracy", float(hit_rate)
 
 
 def compute_simulated_roi(rows: Sequence[EvaluatedPredictionRow]) -> float | None:
@@ -148,6 +188,8 @@ def build_metric_map(rows: Sequence[EvaluatedPredictionRow]) -> dict[str, float 
         "brier_score": compute_brier_score(rows),
         "hit_rate": compute_hit_rate(rows),
         "simulated_roi": compute_simulated_roi(rows),
+        "edge_positive_sample_size": compute_edge_positive_sample_size(rows),
+        "edge_positive_win_rate": compute_edge_positive_win_rate(rows),
     }
 
 
@@ -183,6 +225,7 @@ def group_rows_by_segment(
     for row in rows:
         segment_keys = {
             f"market_code={row.market_code}",
+            f"prediction_horizon={row.prediction_horizon}",
         }
         if row.competition_id is not None or row.competition_name is not None:
             segment_keys.add(f"competition={row.competition_name or row.competition_id}")
@@ -211,6 +254,9 @@ def iter_metric_rows(
         if metric_value is None:
             continue
         yield None, metric_code, float(metric_value)
+
+    for segment_key, metric_code, metric_value in iter_calibration_metric_rows(rows):
+        yield segment_key, metric_code, float(metric_value)
 
     for segment_key, segment_rows in sorted(group_rows_by_segment(rows).items()):
         segment_metrics = build_metric_map(segment_rows)

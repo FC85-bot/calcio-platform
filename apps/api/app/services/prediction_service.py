@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-import math
 from typing import Any
 from uuid import UUID
 
@@ -853,9 +853,11 @@ class PredictionService:
 
     def _compute_edge_pct(
         self, *, market_best_odds: float | None, fair_odds: float | None
-    ) -> float | None:
-        if market_best_odds is None or fair_odds is None or fair_odds <= 0:
-            return None
+    ) -> float:
+        if fair_odds is None or fair_odds <= 0:
+            return 0.0
+        if market_best_odds is None or market_best_odds <= 1:
+            return 0.0
         return round(((market_best_odds / fair_odds) - 1.0) * 100.0, DEFAULT_EDGE_DECIMALS)
 
     def _compute_data_quality_score(
@@ -869,13 +871,16 @@ class PredictionService:
     def _compute_confidence_score(
         self, *, data_quality_score: float, probability_vector: dict[str, float]
     ) -> float:
-        ordered = sorted(probability_vector.values(), reverse=True)
-        if len(ordered) >= 2:
-            stability = ordered[0] - ordered[1]
-        else:
-            stability = abs((ordered[0] if ordered else 0.5) - 0.5) * 2
-        confidence = (data_quality_score * 70.0) + (self._clamp(stability, 0.0, 1.0) * 30.0)
-        return round(self._clamp(confidence, 0.0, 100.0), DEFAULT_CONFIDENCE_DECIMALS)
+        probs = list(probability_vector.values())
+        probs = [max(p, 1e-12) for p in probs]
+
+        entropy = -sum(p * math.log(p) for p in probs)
+        max_entropy = math.log(len(probs)) if len(probs) > 1 else 1.0
+        uncertainty = entropy / max_entropy
+
+        confidence = (data_quality_score * 0.5 + (1 - uncertainty) * 0.5) * 100
+
+        return round(max(min(confidence, 100.0), 0.0), 2)
 
     def _load_active_model_versions(self, markets: list[str]) -> dict[str, ActiveModelVersion]:
         if not markets:

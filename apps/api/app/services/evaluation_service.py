@@ -27,9 +27,9 @@ from app.schemas.evaluation import (
 )
 from app.services.evaluation_metrics import (
     EXPECTED_SELECTION_CODES,
+    SUPPORTED_EVALUATION_MARKETS,
     EvaluatedPredictionRow,
     EvaluatedSelection,
-    SUPPORTED_EVALUATION_MARKETS,
     iter_metric_rows,
     probability_sum_is_valid,
 )
@@ -47,6 +47,7 @@ class _AlignedPredictionContext:
     prediction_id: UUID
     match_id: UUID
     market_code: str
+    prediction_horizon: str
     competition_id: UUID | None
     competition_name: str | None
     season_id: UUID | None
@@ -133,6 +134,7 @@ class EvaluationService:
                     "no_closing_line_value_engine",
                     "simulated_roi_uses_top_selection_and_market_best_odds_available_on_prediction_row",
                 ],
+                "edge_quality": "snapshot_based_weak",
             },
         )
         self.db.add(evaluation_run)
@@ -160,6 +162,19 @@ class EvaluationService:
                 )
                 for segment_key, metric_code, metric_value in iter_metric_rows(aligned_rows)
             ]
+
+            coverage_rate = self._compute_coverage_rate(
+                aligned_prediction_count=len(aligned_rows),
+                expected_prediction_count=quality_checks.get("expected_prediction_count", 0),
+            )
+            metric_rows.append(
+                EvaluationMetric(
+                    evaluation_run_id=evaluation_run.id,
+                    metric_code="coverage_rate",
+                    metric_value=float(coverage_rate),
+                    segment_key=None,
+                )
+            )
             self.db.add_all(metric_rows)
 
             warnings: list[str] = []
@@ -316,6 +331,7 @@ class EvaluationService:
                     prediction_id=context.prediction_id,
                     match_id=context.match_id,
                     market_code=context.market_code,
+                    prediction_horizon=context.prediction_horizon,
                     competition_id=context.competition_id,
                     competition_name=context.competition_name,
                     season_id=context.season_id,
@@ -349,6 +365,11 @@ class EvaluationService:
             "skipped_total": int(sum(skip_counts.values())),
             "skip_reasons": dict(skip_counts),
             "model_version_filter_applied": str(model_version_id) if model_version_id else None,
+            "skip_rate": (
+                float(sum(skip_counts.values())) / len(raw_contexts)
+                if len(raw_contexts) > 0
+                else 0.0
+            ),
         }
         return aligned_rows, quality_checks
 
@@ -370,6 +391,7 @@ class EvaluationService:
                 Prediction.id.label("prediction_id"),
                 Prediction.match_id,
                 Prediction.market_code,
+                Prediction.prediction_horizon,
                 Match.competition_id,
                 Competition.name.label("competition_name"),
                 Match.season_id,
@@ -428,6 +450,7 @@ class EvaluationService:
                     prediction_id=row["prediction_id"],
                     match_id=row["match_id"],
                     market_code=row["market_code"],
+                    prediction_horizon=row["prediction_horizon"],
                     competition_id=row["competition_id"],
                     competition_name=row["competition_name"],
                     season_id=row["season_id"],
@@ -492,6 +515,13 @@ class EvaluationService:
                 key=lambda item: position.get(item.selection_code, 999),
             )
         return ordered_payload
+
+    def _compute_coverage_rate(
+        self, *, aligned_prediction_count: int, expected_prediction_count: int
+    ) -> float:
+        if expected_prediction_count <= 0:
+            return 0.0
+        return round(aligned_prediction_count / expected_prediction_count, 6)
 
     def _load_metrics_by_run(self, run_ids: list[UUID]) -> dict[UUID, list[EvaluationMetric]]:
         if not run_ids:
