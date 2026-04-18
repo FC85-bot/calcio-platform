@@ -22,13 +22,16 @@ from app.models.provider_entity import ProviderEntity
 from app.models.raw_ingestion import RawIngestion
 from app.models.team import Team
 
-
 DATA_CONFIDENCE_SIGNAL_DEFINITIONS = (
     ("matches_missing_team_count", "normalized/core", "_count_matches_missing_team"),
     ("matches_missing_competition_count", "normalized/core", "_count_matches_missing_competition"),
     ("provider_mapping_missing_count", "normalization/mapping", "_count_provider_mapping_missing"),
     ("odds_inconsistent_count", "odds", "_count_odds_inconsistent"),
-    ("predictions_without_selections_count", "predictions", "_count_predictions_without_selections"),
+    (
+        "predictions_without_selections_count",
+        "predictions",
+        "_count_predictions_without_selections",
+    ),
 )
 
 
